@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Order;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 
 class VendorController extends Controller
@@ -46,18 +47,25 @@ class VendorController extends Controller
         ]);
     }
 
-    
+
    // Update Store Details
+
 public function updateStoreDetails(Request $request)
 {
-    $vendor = Auth::user();
+    // Fetch the user using Eloquent
+    $vendor = User::find(Auth::id());
 
+    if (!$vendor) {
+        return response()->json(['message' => 'Vendor not found'], 404);
+    }
+
+    // Validate input
     $validatedData = $request->validate([
         'store_name' => 'required|string|max:255',
         'store_description' => 'nullable|string',
     ]);
 
-    // Directly update the user record
+    // Ensure the User model has fillable fields
     $vendor->update($validatedData);
 
     return response()->json(['message' => 'Store details updated successfully', 'vendor' => $vendor]);

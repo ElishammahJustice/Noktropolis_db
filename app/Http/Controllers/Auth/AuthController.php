@@ -91,13 +91,26 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        auth()->user()->tokens()->delete();
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json(['message' => 'No authenticated user found.'], 401);
+        }
+
+        $user->tokens()->delete();
+
         return response()->json(['message' => 'Logged out successfully']);
     }
 
     public function user_info(Request $request): JsonResponse
     {
-        $user = $request->user()->load('role');
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated.'], 401);
+        }
+
+        $user->load('role');
 
         if ($user->status === 'suspended') {
             return response()->json(['message' => 'Your account has been suspended. Please contact support.'], 403);
