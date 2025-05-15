@@ -3,70 +3,111 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Role};
+use App\Models\{Role, User};
 use Illuminate\Http\{JsonResponse, Request};
-use Illuminate\Support\Facades\{Auth, Hash};
+use Illuminate\Support\Facades\{Hash, Auth};
 
 class AdminController extends Controller
 {
     public function __construct()
     {
         $this->middleware('auth:sanctum');
-        $this->middleware('admin');
+
+        // Ensure user has the 'access_admin' ability
+        $this->middleware(function (Request $request, $next) {
+            /** @var User|null $user */
+            $user = $request->user();
+
+            if (! $user || ! $user->hasAbility('access_admin')) {
+                return response()->json(['error' => 'Forbidden'], 403);
+            }
+
+            return $next($request);
+        });
     }
 
-    // Admin-only Registration (Admins can create other Admins)
+    // Admin-only registration
     public function adminRegister(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (! $user->hasAbility('create_admin')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
         $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-            'password_confirmation' => 'required'
+            'name'                 => 'required|string|max:255',
+            'email'                => 'required|email|unique:users',
+            'password'             => 'required|string|min:8|confirmed',
+            'password_confirmation'=> 'required'
         ]);
 
-        $adminRole = Role::where('name', 'admin')->firstOrFail();
+        $adminRole = Role::where('slug', 'admin')->firstOrFail();
 
-        $admin = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role_id' => $adminRole->id,
-            'is_approved' => true // Admins are approved by default
+        $newAdmin = User::create([
+            'name'        => $request->name,
+            'email'       => $request->email,
+            'password'    => bcrypt($request->password),
+            'role_id'     => $adminRole->id,
+            'is_approved' => true,
         ]);
 
-        return response()->json(['message' => 'Admin created successfully.', 'admin' => $admin], 201);
+        return response()->json([
+            'message' => 'Admin created successfully.',
+            'admin'   => $newAdmin,
+        ], 201);
     }
 
-    // Fetch users awaiting approval
-    public function pendingApprovals(): JsonResponse
+    // List pending approvals
+    public function pendingApprovals(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (! $user->hasAbility('view_pending_users')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
         $users = User::where('is_approved', false)->with('role')->get();
         return response()->json($users);
     }
 
     // Approve a user
-    public function approveUser($id): JsonResponse
+    public function approveUser(Request $request, $id): JsonResponse
     {
-        $user = User::findOrFail($id);
-        $user->is_approved = true;
-        $user->save();
+        /** @var User $user */
+        $user = $request->user();
+
+        if (! $user->hasAbility('approve_user')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $target = User::findOrFail($id);
+        $target->update(['is_approved' => true]);
+
         return response()->json(['message' => 'User approved successfully.']);
     }
 
-    // Assign role to user
+    // Assign a role
     public function assignRole(Request $request, $id): JsonResponse
     {
-        $request->validate([
-            'role' => 'required|string|exists:roles,name'
+        /** @var User $user */
+        $user = $request->user();
+
+        if (! $user->hasAbility('assign_roles')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $request->validate(['role' => 'required|string|exists:roles,slug']);
+
+        $targetRole = Role::where('slug', $request->role)->firstOrFail();
+        $target     = User::findOrFail($id);
+        $target->update(['role_id' => $targetRole->id]);
+
+        return response()->json([
+            'message' => 'Role assigned successfully.',
+            'user'    => $target->load('role'),
         ]);
-
-        $user = User::findOrFail($id);
-        $role = Role::where('name', $request->role)->firstOrFail();
-
-        $user->role_id = $role->id;
-        $user->save();
-
-        return response()->json(['message' => 'Role assigned successfully.', 'user' => $user->load('role')]);
     }
 }

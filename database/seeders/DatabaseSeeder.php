@@ -13,8 +13,13 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Run RoleSeeder first
-        $this->call(RoleSeeder::class);
+        // Run AbilitySeeder first
+        $this->call([
+            AbilitySeeder::class,
+            RoleSeeder::class,
+            FirstAdminSeeder::class,
+            VendorSeeder::class,
+        ]);
 
         // Fetch roles
         $adminRole = Role::where('slug', 'admin')->first();

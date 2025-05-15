@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -6,83 +7,52 @@ use App\Models\Role;
 
 class RoleController extends Controller
 {
+    public function __construct()
+    {
+        //$this->middleware('auth:sanctum');
+        //$this->middleware(function ($request, $next) {
+           // if (! $request->user()->hasAbility('manage_roles')) {
+           //     return response()->json(['error' => 'Forbidden'], 403);
+          //  }
+          //  return $next($request);
+       // });
+    }
+
     public function index()
     {
-        try {
-            $roles = Role::all();
-
-            if ($roles->isEmpty()) {
-                return response()->json(["message" => "No roles found"], 404);
-            }
-
-            return response()->json(["roles" => $roles], 200);
-        } catch (\Exception $e) {
-            return response()->json(["error" => "Error fetching roles"], 500);
-        }
+        return response()->json(['roles' => Role::all()]);
     }
 
-    public function createRole(Request $request)
+    public function store(Request $request)
     {
         $validated = $request->validate([
-            "name" => "required|string|max:255|unique:roles",
-            "slug" => "required|string|max:255|unique:roles",
-            "description" => "nullable|string|max:1000",
+            'id'          => 'required|integer',
+            'name'        => 'required|string|unique:roles,name',
+            'slug'        => 'required|string|unique:roles,slug',
+            'description' => 'nullable|string',
         ]);
 
-        try {
-            $role = Role::create($validated);
-            return response()->json(["message" => "Role created successfully", "role" => $role], 201);
-        } catch (\Exception $e) {
-            return response()->json(["error" => "Error creating role"], 500);
-        }
+        $role = Role::create($validated);
+        return response()->json(['role' => $role], 201);
     }
 
-    public function getRole($id)
+    public function update(Request $request, $id)
     {
-        $role = Role::find($id);
-
-        if (!$role) {
-            return response()->json(["error" => "Role not found"], 404);
-        }
-
-        return response()->json(["role" => $role], 200);
-    }
-
-    public function updateRole(Request $request, $id)
-    {
-        $role = Role::find($id);
-
-        if (!$role) {
-            return response()->json(["error" => "Role not found"], 404);
-        }
-
+        $role = Role::findOrFail($id);
         $validated = $request->validate([
-            "name" => "required|string|max:255|unique:roles,name," . $id,
-            "slug" => "required|string|max:255|unique:roles,slug," . $id,
-            "description" => "nullable|string|max:1000",
+            'name'        => 'required|string|unique:roles,name,' . $id,
+            'slug'        => 'required|string|unique:roles,slug,' . $id,
+            'description' => 'nullable|string',
         ]);
 
-        try {
-            $role->update($validated);
-            return response()->json(["message" => "Role updated successfully", "role" => $role], 200);
-        } catch (\Exception $e) {
-            return response()->json(["error" => "Error updating role"], 500);
-        }
+        $role->update($validated);
+        return response()->json(['role' => $role]);
     }
 
-    public function deleteRole($id)
+    public function destroy($id)
     {
-        $role = Role::find($id);
-
-        if (!$role) {
-            return response()->json(["error" => "Role not found"], 404);
-        }
-
-        try {
-            $role->delete();
-            return response()->json(["message" => "Role deleted successfully"], 200);
-        } catch (\Exception $e) {
-            return response()->json(["error" => "Error deleting role"], 500);
-        }
+        $role = Role::findOrFail($id);
+        $role->delete();
+        return response()->json(['message' => 'Role deleted.']);
     }
 }

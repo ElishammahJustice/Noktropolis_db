@@ -3,55 +3,88 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Product;
+use App\Models\User;
 
 class VendorProductController extends Controller
 {
-    // Get products for the authenticated vendor
-    public function index()
+    public function __construct()
     {
-        return response()->json(Product::where('vendor_id', Auth::id())->get());
+        $this->middleware('auth:sanctum');
     }
 
-    // Create a new product
+    public function index()
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->hasAbility('view_vendor_products')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        return response()->json(Product::where('vendor_id', $user->id)->get());
+    }
+
     public function store(Request $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->hasAbility('add_product')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'name'        => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'required|numeric',
-            'stock' => 'required|integer',
-            'image' => 'nullable|string',
+            'price'       => 'required|numeric',
+            'stock'       => 'required|integer',
         ]);
 
         $product = Product::create([
-            'name' => $request->name,
-            'description' => $request->description,
-            'price' => $request->price,
-            'stock' => $request->stock,
-            'image' => $request->image,
-            'vendor_id' => Auth::id(),
+            ...$validated,
+            'vendor_id' => $user->id,
         ]);
 
-        return response()->json(['message' => 'Product added successfully', 'product' => $product], 201);
+        return response()->json(['message' => 'Product created', 'product' => $product]);
     }
 
-    // Update a product (only if it belongs to the vendor)
     public function update(Request $request, $id)
     {
-        $product = Product::where('vendor_id', Auth::id())->findOrFail($id);
-        $product->update($request->all());
+        /** @var User $user */
+        $user = Auth::user();
 
-        return response()->json(['message' => 'Product updated successfully', 'product' => $product]);
+        if (! $user->hasAbility('edit_product')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $product = Product::where('vendor_id', $user->id)->findOrFail($id);
+
+        $validated = $request->validate([
+            'name'        => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string',
+            'price'       => 'sometimes|required|numeric',
+            'stock'       => 'sometimes|required|integer',
+        ]);
+
+        $product->update($validated);
+
+        return response()->json(['message' => 'Product updated', 'product' => $product]);
     }
 
-    // Delete a product (only if it belongs to the vendor)
     public function destroy($id)
     {
-        $product = Product::where('vendor_id', Auth::id())->findOrFail($id);
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->hasAbility('delete_product')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $product = Product::where('vendor_id', $user->id)->findOrFail($id);
         $product->delete();
 
-        return response()->json(['message' => 'Product deleted successfully']);
+        return response()->json(['message' => 'Product deleted']);
     }
 }

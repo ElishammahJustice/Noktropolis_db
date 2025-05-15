@@ -9,65 +9,89 @@ use Illuminate\Support\Facades\Auth;
 
 class VendorController extends Controller
 {
-    // Get Vendor Orders
-    public function getOrders()
+    public function __construct()
     {
-        return response()->json(Order::where('vendor_id', Auth::id())->get());
+        $this->middleware('auth:sanctum');
     }
 
-    // Update Order Status
+    // Vendor’s orders
+    public function getOrders()
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->hasAbility('view_vendor_orders')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+        return response()->json(Order::where('vendor_id', $user->id)->get());
+    }
+
+    // Update order status
     public function updateOrderStatus(Request $request, $id)
     {
-        $order = Order::where('vendor_id', Auth::id())->findOrFail($id);
-        $order->update(['status' => $request->status]);
+        /** @var User $user */
+        $user = Auth::user();
 
+        if (! $user->hasAbility('update_order_status')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $order = Order::where('vendor_id', $user->id)->findOrFail($id);
+        $order->update(['status' => $request->status]);
         return response()->json(['message' => 'Order status updated successfully', 'order' => $order]);
     }
 
-    // Get Earnings
+    // Get earnings
     public function getEarnings()
     {
-        $totalEarnings = Order::where('vendor_id', Auth::id())->sum('total_price');
+        /** @var User $user */
+        $user = Auth::user();
 
-        return response()->json(['total_earnings' => $totalEarnings]);
+        if (! $user->hasAbility('view_earnings')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $total = Order::where('vendor_id', $user->id)->sum('total_price');
+        return response()->json(['total_earnings' => $total]);
     }
 
-    // Get Store Details
+    // Get store details
     public function getStoreDetails()
     {
-        $vendor = Auth::user();
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->hasAbility('view_store_settings')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
 
         return response()->json([
-            'store_name' => $vendor->store_name,
-            'store_description' => $vendor->store_description,
-            'contact_email' => $vendor->email,
-            'contact_phone' => $vendor->phone ?? null,
-            'store_logo' => $vendor->store_logo ?? null,
-            'store_status' => $vendor->is_approved ? 'Active' : 'Pending Approval'
+            'store_name'        => $user->store_name,
+            'store_description' => $user->store_description,
+            'contact_email'     => $user->email,
+            'contact_phone'     => $user->phone,
+            'store_logo'        => $user->store_logo,
+            'store_status'      => $user->is_approved ? 'Active' : 'Pending Approval',
         ]);
     }
 
+    // Update store details
+    public function updateStoreDetails(Request $request)
+    {
+        /** @var User $user */
+        $user = Auth::user();
 
-   // Update Store Details
+        if (! $user->hasAbility('edit_store_settings')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
 
-public function updateStoreDetails(Request $request)
-{
-    // Fetch the user using Eloquent
-    $vendor = User::find(Auth::id());
+        $validated = $request->validate([
+            'store_name'        => 'required|string|max:255',
+            'store_description' => 'nullable|string',
+        ]);
 
-    if (!$vendor) {
-        return response()->json(['message' => 'Vendor not found'], 404);
+        $user->update($validated);
+
+        return response()->json(['message' => 'Store details updated successfully', 'vendor' => $user]);
     }
-
-    // Validate input
-    $validatedData = $request->validate([
-        'store_name' => 'required|string|max:255',
-        'store_description' => 'nullable|string',
-    ]);
-
-    // Ensure the User model has fillable fields
-    $vendor->update($validatedData);
-
-    return response()->json(['message' => 'Store details updated successfully', 'vendor' => $vendor]);
-}
 }

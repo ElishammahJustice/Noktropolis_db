@@ -6,10 +6,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use Illuminate\Database\Eloquent\Model;
+
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable; // Add HasApiTokens here
+    use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
         'name',
@@ -18,10 +18,10 @@ class User extends Authenticatable
         'role_id',
         'is_approved',
         'status',
-        'store_name', // Add this
-        'store_description', // Add this
-        'phone', // If applicable
-        'store_logo', // If applicable
+        'store_name',
+        'store_description',
+        'phone',
+        'store_logo',
     ];
 
     protected $hidden = [
@@ -31,17 +31,37 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'password' => 'hashed',
-        'is_approved' => 'boolean',
+        'is_approved'       => 'boolean',
+        'password'          => 'hashed',
     ];
 
+    /**
+     * The role that this user belongs to.
+     */
     public function role()
     {
         return $this->belongsTo(Role::class);
     }
 
+    /**
+     * Check if the user has the given ability via their role.
+     */
+    public function hasAbility(string $ability): bool
+    {
+        if (! $this->role) {
+            return false;
+        }
+
+        return $this->role->abilities()
+                    ->where('name', $ability)
+                    ->exists();
+    }
+
+    /**
+     * Shortcut to check role name.
+     */
     public function hasRole(string $role): bool
     {
-        return optional($this->role)->name === $role;
+        return optional($this->role)->slug === $role;
     }
 }

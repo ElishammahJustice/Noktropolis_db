@@ -2,82 +2,107 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use App\Models\User;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rule;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
-    public function index(): JsonResponse
+    public function __construct()
     {
-        $this->authorize('viewAny', User::class);
-        $users = User::with('role')->paginate();
-        return response()->json($users);
+        $this->middleware('auth:sanctum');
     }
 
-    public function store(Request $request): JsonResponse
+    // Get all users (admin only)
+    public function index()
     {
-        $this->authorize('create', User::class);
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'password' => ['required', 'string', 'min:8'],
-            'role_id' => ['required', 'exists:roles,id'],
-        ]);
+        /** @var User $user */
+        $user = Auth::user();
 
-
-
-        $validated['password'] = Hash::make($validated['password']);
-        $user = User::create($validated);
-        return response()->json($user->load('role'), 201);
-    }
-
-    public function show(User $user): JsonResponse
-    {
-        $this->authorize('view', $user);
-        return response()->json($user->load('role'));
-    }
-
-    public function update(Request $request, User $user): JsonResponse
-    {
-        $this->authorize('update', $user);
-        $validated = $request->validate([
-            'name' => ['sometimes', 'string', 'max:255'],
-            'email' => ['sometimes', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'password' => ['sometimes', 'string', 'min:8'],
-
-            'role_id' => ['sometimes', 'exists:roles,id'],
-            'is_active' => ['sometimes', 'boolean'],
-        ]);
-
-
-
-        if (isset($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
+        if (! $user->hasAbility('view_users')) {
+            return response()->json(['error' => 'Forbidden'], 403);
         }
-        $user->update($validated);
-        return response()->json($user->load('role'));
+
+        return response()->json(User::all());
     }
 
-    public function destroy(User $user): JsonResponse
+    // Get single user (admin or self)
+    public function show($id)
     {
-        $this->authorize('delete', $user);
-        $user->delete();
-        return response()->json(null, 204);
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->hasAbility('view_user') && $user->id != $id) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        return response()->json(User::findOrFail($id));
     }
 
-    public function suspendUser($id)
-{
-    $user = User::find($id);
+    // Create user (admin only)
+    public function store(Request $request)
+    {
+        /** @var User $user */
+        $user = Auth::user();
 
-    if (!$user) {
-        return response()->json(['message' => 'User not found'], 404);
+        if (! $user->hasAbility('create_user')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|email|unique:users',
+            'password' => 'required|string|min:6',
+        ]);
+
+        $validated['password'] = bcrypt($validated['password']);
+        $newUser = User::create($validated);
+
+        return response()->json(['message' => 'User created successfully', 'user' => $newUser]);
     }
 
-    $user->update(['status' => 'suspended']); // Ensure you have a 'status' column in users table
-    return response()->json(['message' => 'User suspended successfully']);
-}
+    // Update user (admin or self)
+    public function update(Request $request, $id)
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->hasAbility('edit_user') && $user->id != $id) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $targetUser = User::findOrFail($id);
+
+        $validated = $request->validate([
+            'name'     => 'sometimes|string|max:255',
+            'email'    => 'sometimes|email|unique:users,email,' . $id,
+            'password' => 'nullable|string|min:6',
+        ]);
+
+        if (!empty($validated['password'])) {
+            $validated['password'] = bcrypt($validated['password']);
+        } else {
+            unset($validated['password']);
+        }
+
+        $targetUser->update($validated);
+
+        return response()->json(['message' => 'User updated successfully', 'user' => $targetUser]);
+    }
+
+    // Delete user (admin only)
+    public function destroy($id)
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->hasAbility('delete_user')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $targetUser = User::findOrFail($id);
+        $targetUser->delete();
+
+        return response()->json(['message' => 'User deleted successfully']);
+    }
 }
